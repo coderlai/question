@@ -1,0 +1,163 @@
+doctype html
+html(lang='zh-cn')
+    head
+        meta(charset='UTF-8')
+        meta(name='viewport', content='width=device-width, initial-scale=1')
+        title 问答网站
+        meta(name='keywords', content='问答网站')
+        meta(name='description', content='程序员，为代码而生！大神问答，为程序员而生！')
+        link(rel='stylesheet', href='./static/components/bootstrap/dist/css/bootstrap.css')
+        link(rel='stylesheet', href='./static/components/font-awesome/css/font-awesome.css')
+        link(rel='stylesheet', href='./css/global.css')
+        link(rel='stylesheet', href='./static/components/summernote/dist/summernote.css')
+        link(rel='stylesheet', href='./static/components/select2/dist/css/select2.css')
+    body
+        include layout/header
+        .wrap
+            .container
+                .row.mt-10
+                    ol.breadcrumb
+                        li
+                            a(href='http://www.dashen100.com/questions') 问答
+                        li.active 发起提问
+                    form#questionForm(method='POST', role='form', action='/question/store')
+                        .form-group
+                            label(for='title') 请将您的问题告诉我们 :
+                            input#title.form-control.input-lg(type='text', name='title', placeholder='请在这里概述您的问题', value='')
+                        #titleSuggest.panel.hide.widget-suggest.panel-default
+                            .panel-body
+                                p
+                                    strong 这些问题可能有你需要的答案
+                                    button.widget-suggest-close.btn.btn-default.btn-xs.ml-10(type='button') 关闭提示
+                                ul#suggest-list.list-unstyled.widget-suggest-list
+                        .form-group
+                            label(for='question_editor') 问题描述(选填)
+                            #question_editor(style='display: none;')
+                        #selected-tags.col-md-12
+                        .form-group
+                            label.col-md-2 添加话题(可多选)
+                            div.col-md-2
+                                select.form-control(id="tag-list")
+                            div.col-md-2
+                                button.btn.btn-warning(id="resetTags") 重置话题标签
+                            label.col-md-2 悬赏金币
+                            div.col-md-2
+                                input.form-control(id="reward",type="number")
+                        .row.mt-20
+                            .col-md-8
+                            .col-md-4
+                                button.btn.btn-primary.pull-right(type='submit') 发布问题
+        include layout/footer
+        script(src='./static/components/jquery/dist/jquery.js')
+        script(src='./static/components/bootstrap/dist/js/bootstrap.js')
+        script(type='text/javascript').
+            var is_login = Boolean("1");
+        script(src='./js/global.js')
+        script(src='./static/components/summernote/dist/summernote.js')
+        script(src='./static/components/summernote/lang/summernote-zh-CN.js')
+        script(src='./static/components/select2/dist/js/select2.js')
+        script(type='text/javascript').
+            var suggest_timer = null;
+            var selectedTags = [];
+            $(document).ready(function() {
+                $('#question_editor').summernote({
+                    lang: 'zh-CN',
+                    height: 180,
+                    placeholder:'您可以在这里继续补充问题细节',
+                    toolbar: [ ['common', ['style','bold','ol','link','picture','clear','fullscreen']] ],
+                    callbacks: {
+                        onChange:function (contents, $editable) {
+                            var code = $(this).summernote("code");
+                            $("#question_editor_content").val(code);
+                        },
+                        onImageUpload: function(files) {
+                            upload_editor_image(files[0],'question_editor');
+                        }
+                    }
+                });
+                /*加载已存在的标签*/
+                $.ajax({
+                    type:"get",
+                    url:"/ajax/loadTags",
+                    dataType:"json",
+                    success:function (data, xhr, status) {
+                        //console.log(data.result);
+                        $.each(data.result,function (index, item) {
+                            //console.log(item.topicName);
+                            $("#tag-list").append("<option value='"+item.topicName+"'>"+item.topicName+"</option>");
+                        });
+                    }
+                });
+                /*选择话题标签*/
+                $("#tag-list").change(function () {
+                    var value = $(this).children("option:selected").val();
+                    console.log(value);
+                    if(selectedTags.indexOf(value)>-1){
+                        alert("该话题已被选择过");
+                    }else{
+                        $("#selected-tags").append("<span class='selected-item'>" + value + "</span>");
+                        selectedTags.push(value);
+                    }
+                });
+                /*重置话题标签*/
+                $("#resetTags").click(function (event) {
+                    event.preventDefault();
+                    selectedTags.length = 0;
+                    $("#selected-tags").html("");
+                });
+
+                /*suggest处理*/
+                $("#title").keydown(function(){
+                    if(suggest_timer){
+                        clearTimeout(suggest_timer);
+                    }
+                    suggest_timer = setTimeout(function() {
+                        var title = $("#title").val();
+                        if( title.length > 1 ){
+                            $.ajax({
+                                url: '/question/suggest',
+                                type:'post',
+                                data:'word='+title,
+                                cache: false,
+                                success: function(html){
+                                    if(html == ''){
+                                        $("#suggest-list").html('<li>没有找到相似问题！</li>');
+                                        return;
+                                    }
+                                    $(".widget-suggest").removeClass("hide");
+                                    $("#suggest-list").html(html);
+                                }
+                            });
+                        }
+                    }, 500);
+                });
+                $(".widget-suggest-close").click(function(){
+                    $(".widget-suggest").addClass("hide");
+                });
+
+                /*提交问题*/
+                $("#questionForm").submit(function (ev) {
+                    ev.preventDefault();
+                    var markupStr = $('#question_editor').summernote('code');
+                    console.log(markupStr);
+
+                    var title = $("#title").val();
+
+                    var detail = markupStr;
+
+                    var reward = $("#reward").val();
+
+                    $.ajax({
+                        type:"post",
+                        url:"/question/store",
+                        data:{info:title,detail:detail,reward:reward,tags:selectedTags},
+                        success:function (data, xhr, status) {
+                            alert(data.message);
+                            if(date.isSuccess){
+                                $("#questionForm").reset();
+                            }
+                            console.log(data);
+                        }
+                    });
+                });
+            });
